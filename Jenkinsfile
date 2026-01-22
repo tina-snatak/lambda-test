@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "ap-southeast-1"
+        AWS_REGION   = "ap-southeast-1"
         FUNCTION_NAME = "vault-fun"
-        LAYER_NAME = "vault-layer"
+        LAYER_NAME    = "vault-layer"
     }
 
     stages {
@@ -16,12 +16,26 @@ pipeline {
             }
         }
 
+        stage('Prepare Tools') {
+            steps {
+                sh '''
+                sudo apt-get update -y
+                sudo apt-get install -y python3 python3-pip zip jq
+                python3 --version
+                python3 -m pip --version
+                '''
+            }
+        }
+
         stage('Build Lambda Layer') {
             steps {
                 sh '''
-                rm -rf layer python layer.zip
+                rm -rf python layer.zip
                 mkdir -p python
-                pip3 install -r requirements.txt -t python/
+
+                # Ubuntu-safe pip install
+                python3 -m pip install -r requirements.txt -t python/
+
                 zip -r layer.zip python
                 '''
             }
@@ -35,6 +49,8 @@ pipeline {
                   --zip-file fileb://layer.zip \
                   --compatible-runtimes python3.10 \
                   --region $AWS_REGION > layer.json
+
+                cat layer.json
                 '''
             }
         }
@@ -42,7 +58,7 @@ pipeline {
         stage('Attach Layer to Lambda') {
             steps {
                 sh '''
-                LAYER_ARN=$(cat layer.json | jq -r '.LayerVersionArn')
+                LAYER_ARN=$(jq -r '.LayerVersionArn' layer.json)
 
                 aws lambda update-function-configuration \
                   --function-name $FUNCTION_NAME \
@@ -55,6 +71,7 @@ pipeline {
         stage('Package Lambda Function') {
             steps {
                 sh '''
+                rm -f function.zip
                 zip function.zip lambda_function.py
                 '''
             }
