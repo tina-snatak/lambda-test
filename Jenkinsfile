@@ -27,12 +27,11 @@ pipeline {
                 sh '''
                 set -e
 
-                python3 -m venv venv
-                source venv/bin/activate
-
+                rm -rf python layer.zip
                 mkdir python
-                pip install --upgrade pip
-                pip install -r requirements.txt -t python/
+
+                python3 -m pip install --upgrade pip
+                python3 -m pip install -r requirements.txt -t python/
 
                 cd python
                 zip -r ../layer.zip .
@@ -45,10 +44,8 @@ pipeline {
 
         stage('Publish Lambda Layer') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
+                withCredentials([[ $class: 'AmazonWebServicesCredentialsBinding',
+                                   credentialsId: 'aws-creds' ]]) {
                     sh '''
                     aws lambda publish-layer-version \
                       --layer-name $LAYER_NAME \
@@ -64,10 +61,8 @@ pipeline {
 
         stage('Attach Layer to Lambda') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
+                withCredentials([[ $class: 'AmazonWebServicesCredentialsBinding',
+                                   credentialsId: 'aws-creds' ]]) {
                     sh '''
                     LAYER_ARN=$(jq -r '.LayerVersionArn' layer.json)
 
@@ -83,18 +78,15 @@ pipeline {
         stage('Package Lambda Function') {
             steps {
                 sh '''
-                zip function.zip lambda_function.py
-                ls -lh function.zip
+                zip -r function.zip lambda-function.py
                 '''
             }
         }
 
         stage('Deploy Lambda Code') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
+                withCredentials([[ $class: 'AmazonWebServicesCredentialsBinding',
+                                   credentialsId: 'aws-creds' ]]) {
                     sh '''
                     aws lambda update-function-code \
                       --function-name $FUNCTION_NAME \
@@ -108,10 +100,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ PIPELINE SUCCESS – Lambda deployed"
+            echo "✅ PIPELINE SUCCESS – Lambda + Layer deployed"
         }
         failure {
-            echo "❌ PIPELINE FAILED"
+            echo "❌ PIPELINE FAILED – check logs"
         }
     }
 }
