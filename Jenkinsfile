@@ -27,17 +27,10 @@ pipeline {
                 sh '''
                 set -e
 
-                rm -rf python layer.zip venv
+                rm -rf python layer.zip
                 mkdir python
 
-                # create virtualenv (SAFE way)
-                python3 -m venv venv
-                . venv/bin/activate
-
-                pip install -r requirements.txt -t python/
-
-                deactivate
-                rm -rf venv
+                python3 -m pip install -r requirements.txt -t python/
 
                 cd python
                 zip -r ../layer.zip .
@@ -59,14 +52,13 @@ pipeline {
                       --layer-name $LAYER_NAME \
                       --zip-file fileb://layer.zip \
                       --compatible-runtimes python3.10 \
-                      --region $AWS_REGION > layer.json
-
-                    cat layer.json
+                      --region $AWS_REGION
                     '''
                 }
             }
         }
 
+        // 🔥 YAHI MAIN CHANGE HAI (jq removed)
         stage('Attach Layer to Lambda') {
             steps {
                 withCredentials([[ 
@@ -74,7 +66,13 @@ pipeline {
                     credentialsId: 'aws-creds' 
                 ]]) {
                     sh '''
-                    LAYER_ARN=$(jq -r '.LayerVersionArn' layer.json)
+                    LAYER_ARN=$(aws lambda list-layer-versions \
+                      --layer-name $LAYER_NAME \
+                      --query 'LayerVersions[0].LayerVersionArn' \
+                      --output text \
+                      --region $AWS_REGION)
+
+                    echo "Using Layer ARN: $LAYER_ARN"
 
                     aws lambda update-function-configuration \
                       --function-name $FUNCTION_NAME \
