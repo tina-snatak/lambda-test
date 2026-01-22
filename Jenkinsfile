@@ -12,7 +12,7 @@ pipeline {
         stage('Clone Repo') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/your-org/lambda-vault-poc.git'
+                    url: 'https://github.com/tina-snatak/lambda-test.git'
             }
         }
 
