@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION   = "ap-southeast-1"
+        AWS_REGION    = "ap-southeast-1"
         FUNCTION_NAME = "vault-fun"
         LAYER_NAME    = "vault-layer"
     }
@@ -11,6 +11,7 @@ pipeline {
 
         stage('Clone Repo') {
             steps {
+                deleteDir()   // 💡 clean workspace (MOST IMPORTANT)
                 git branch: 'main',
                     url: 'https://github.com/tina-snatak/lambda-test.git'
             }
@@ -19,10 +20,23 @@ pipeline {
         stage('Build Lambda Layer') {
             steps {
                 sh '''
+                set -e
+
+                echo "Cleaning old artifacts"
                 rm -rf python layer.zip
-                mkdir -p python
+
+                mkdir python
+
+                echo "Installing dependencies"
                 python3 -m pip install -r requirements.txt -t python/
-                zip -r layer.zip python
+
+                echo "Creating layer zip"
+                cd python
+                zip -r ../layer.zip .
+                cd ..
+
+                echo "Layer zip size:"
+                ls -lh layer.zip
                 '''
             }
         }
@@ -30,8 +44,8 @@ pipeline {
         stage('Publish Lambda Layer') {
             steps {
                 withCredentials([[
-                  $class: 'AmazonWebServicesCredentialsBinding',
-                  credentialsId: 'aws-creds'
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
                     aws lambda publish-layer-version \
@@ -39,6 +53,9 @@ pipeline {
                       --zip-file fileb://layer.zip \
                       --compatible-runtimes python3.10 \
                       --region $AWS_REGION > layer.json
+
+                    echo "Published layer:"
+                    cat layer.json
                     '''
                 }
             }
@@ -47,15 +64,17 @@ pipeline {
         stage('Attach Layer to Lambda') {
             steps {
                 withCredentials([[
-                  $class: 'AmazonWebServicesCredentialsBinding',
-                  credentialsId: 'aws-creds'
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
-                    LAYER_ARN=$(jq -r '.LayerVersionArn' layer.json)
+                    NEW_LAYER_ARN=$(jq -r '.LayerVersionArn' layer.json)
+
+                    echo "New Layer ARN: $NEW_LAYER_ARN"
 
                     aws lambda update-function-configuration \
                       --function-name $FUNCTION_NAME \
-                      --layers $LAYER_ARN \
+                      --layers $NEW_LAYER_ARN \
                       --region $AWS_REGION
                     '''
                 }
@@ -65,7 +84,9 @@ pipeline {
         stage('Package Lambda Function') {
             steps {
                 sh '''
+                rm -f function.zip
                 zip function.zip lambda_function.py
+                ls -lh function.zip
                 '''
             }
         }
@@ -73,8 +94,8 @@ pipeline {
         stage('Deploy Lambda Code') {
             steps {
                 withCredentials([[
-                  $class: 'AmazonWebServicesCredentialsBinding',
-                  credentialsId: 'aws-creds'
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
                     aws lambda update-function-code \
@@ -84,6 +105,15 @@ pipeline {
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ PIPELINE SUCCESS – Lambda deployed"
+        }
+        failure {
+            echo "❌ PIPELINE FAILED – Check logs"
         }
     }
 }
