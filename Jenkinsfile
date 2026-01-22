@@ -9,9 +9,14 @@ pipeline {
 
     stages {
 
+        stage('Clean Workspace') {
+            steps {
+                deleteDir()
+            }
+        }
+
         stage('Clone Repo') {
             steps {
-                deleteDir()   // 💡 clean workspace (MOST IMPORTANT)
                 git branch: 'main',
                     url: 'https://github.com/tina-snatak/lambda-test.git'
             }
@@ -22,20 +27,17 @@ pipeline {
                 sh '''
                 set -e
 
-                echo "Cleaning old artifacts"
-                rm -rf python layer.zip
+                python3 -m venv venv
+                source venv/bin/activate
 
                 mkdir python
+                pip install --upgrade pip
+                pip install -r requirements.txt -t python/
 
-                echo "Installing dependencies"
-                python3 -m pip install -r requirements.txt -t python/
-
-                echo "Creating layer zip"
                 cd python
                 zip -r ../layer.zip .
                 cd ..
 
-                echo "Layer zip size:"
                 ls -lh layer.zip
                 '''
             }
@@ -54,7 +56,6 @@ pipeline {
                       --compatible-runtimes python3.10 \
                       --region $AWS_REGION > layer.json
 
-                    echo "Published layer:"
                     cat layer.json
                     '''
                 }
@@ -68,13 +69,11 @@ pipeline {
                     credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
-                    NEW_LAYER_ARN=$(jq -r '.LayerVersionArn' layer.json)
-
-                    echo "New Layer ARN: $NEW_LAYER_ARN"
+                    LAYER_ARN=$(jq -r '.LayerVersionArn' layer.json)
 
                     aws lambda update-function-configuration \
                       --function-name $FUNCTION_NAME \
-                      --layers $NEW_LAYER_ARN \
+                      --layers $LAYER_ARN \
                       --region $AWS_REGION
                     '''
                 }
@@ -84,7 +83,6 @@ pipeline {
         stage('Package Lambda Function') {
             steps {
                 sh '''
-                rm -f function.zip
                 zip function.zip lambda_function.py
                 ls -lh function.zip
                 '''
@@ -113,7 +111,7 @@ pipeline {
             echo "✅ PIPELINE SUCCESS – Lambda deployed"
         }
         failure {
-            echo "❌ PIPELINE FAILED – Check logs"
+            echo "❌ PIPELINE FAILED"
         }
     }
 }
