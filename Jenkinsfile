@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     parameters {
         booleanParam(
             name: 'ADD_LAYER',
@@ -23,12 +27,17 @@ pipeline {
             }
         }
 
+        stage('Clone Repo') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/tina-snatak/lambda-test.git'
+            }
+        }
+
         /* ================= OPTIONAL LAYER FLOW ================= */
 
         stage('Build Lambda Layer') {
-            when {
-                expression { params.ADD_LAYER }
-            }
+            when { expression { params.ADD_LAYER } }
             steps {
                 sh '''
                 set -e
@@ -44,9 +53,7 @@ pipeline {
         }
 
         stage('Publish Lambda Layer') {
-            when {
-                expression { params.ADD_LAYER }
-            }
+            when { expression { params.ADD_LAYER } }
             steps {
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
@@ -64,9 +71,7 @@ pipeline {
         }
 
         stage('Attach Layer to Lambda') {
-            when {
-                expression { params.ADD_LAYER }
-            }
+            when { expression { params.ADD_LAYER } }
             steps {
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
@@ -91,16 +96,14 @@ pipeline {
         }
 
         stage('Wait for Lambda Update') {
-            when {
-                expression { params.ADD_LAYER }
-            }
+            when { expression { params.ADD_LAYER } }
             steps {
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
-                    echo " Waiting for Lambda layer update..."
+                    echo "Waiting for Lambda layer update..."
 
                     for i in $(seq 1 30); do
                       STATUS=$(aws lambda get-function-configuration \
@@ -112,19 +115,19 @@ pipeline {
                       echo "Attempt $i → $STATUS"
 
                       if [ "$STATUS" = "Successful" ]; then
-                        echo " Update completed"
+                        echo "Lambda update completed"
                         exit 0
                       fi
 
                       if [ "$STATUS" = "Failed" ]; then
-                        echo " Update failed"
+                        echo "Lambda update failed"
                         exit 1
                       fi
 
                       sleep 5
                     done
 
-                    echo " Timeout waiting for update"
+                    echo "Timeout waiting for Lambda update"
                     exit 1
                     '''
                 }
@@ -158,10 +161,10 @@ pipeline {
 
     post {
         success {
-            echo " PIPELINE SUCCESS – Deployment completed"
+            echo "PIPELINE SUCCESS – Deployment completed"
         }
         failure {
-            echo " PIPELINE FAILED – check logs"
+            echo "PIPELINE FAILED – check logs"
         }
     }
 }
