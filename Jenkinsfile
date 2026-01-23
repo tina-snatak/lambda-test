@@ -58,7 +58,7 @@ pipeline {
             }
         }
 
-        // 🔥 YAHI MAIN CHANGE HAI (jq removed)
+        
         stage('Attach Layer to Lambda') {
             steps {
                 withCredentials([[ 
@@ -110,10 +110,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ PIPELINE SUCCESS – Lambda + Layer deployed"
+            echo " PIPELINE SUCCESS – Lambda + Layer deployed"
         }
         failure {
-            echo "❌ PIPELINE FAILED – check logs"
+            echo " PIPELINE FAILED – check logs"
         }
     }
 }
