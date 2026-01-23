@@ -58,7 +58,6 @@ pipeline {
             }
         }
 
-        
         stage('Attach Layer to Lambda') {
             steps {
                 withCredentials([[ 
@@ -78,6 +77,45 @@ pipeline {
                       --function-name $FUNCTION_NAME \
                       --layers $LAYER_ARN \
                       --region $AWS_REGION
+                    '''
+                }
+            }
+        }
+
+        // 🔥 NEW WAIT STAGE (IMPORTANT)
+        stage('Wait for Lambda Update') {
+            steps {
+                withCredentials([[ 
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds' 
+                ]]) {
+                    sh '''
+                    echo "⏳ Waiting for Lambda update to complete..."
+
+                    for i in {1..12}; do
+                      STATUS=$(aws lambda get-function-configuration \
+                        --function-name $FUNCTION_NAME \
+                        --query 'LastUpdateStatus' \
+                        --output text \
+                        --region $AWS_REGION)
+
+                      echo "Current status: $STATUS"
+
+                      if [ "$STATUS" = "Successful" ]; then
+                        echo "✅ Lambda update completed"
+                        exit 0
+                      fi
+
+                      if [ "$STATUS" = "Failed" ]; then
+                        echo "❌ Lambda update failed"
+                        exit 1
+                      fi
+
+                      sleep 5
+                    done
+
+                    echo "❌ Timeout waiting for Lambda update"
+                    exit 1
                     '''
                 }
             }
@@ -110,10 +148,10 @@ pipeline {
 
     post {
         success {
-            echo " PIPELINE SUCCESS – Lambda + Layer deployed"
+            echo "✅ PIPELINE SUCCESS – Lambda + Layer deployed"
         }
         failure {
-            echo " PIPELINE FAILED – check logs"
+            echo "❌ PIPELINE FAILED – check logs"
         }
     }
 }
