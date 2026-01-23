@@ -1,6 +1,14 @@
 pipeline {
     agent any
 
+    parameters {
+        booleanParam(
+            name: 'ADD_LAYER',
+            defaultValue: true,
+            description: 'Do you want to build & attach Lambda Layer?'
+        )
+    }
+
     environment {
         AWS_REGION    = "ap-southeast-1"
         FUNCTION_NAME = "vault-fun"
@@ -22,7 +30,12 @@ pipeline {
             }
         }
 
+        /* ================= OPTIONAL LAYER FLOW ================= */
+
         stage('Build Lambda Layer') {
+            when {
+                expression { params.ADD_LAYER }
+            }
             steps {
                 sh '''
                 set -e
@@ -38,6 +51,9 @@ pipeline {
         }
 
         stage('Publish Lambda Layer') {
+            when {
+                expression { params.ADD_LAYER }
+            }
             steps {
                 withCredentials([[ 
                     $class: 'AmazonWebServicesCredentialsBinding',
@@ -55,6 +71,9 @@ pipeline {
         }
 
         stage('Attach Layer to Lambda') {
+            when {
+                expression { params.ADD_LAYER }
+            }
             steps {
                 withCredentials([[ 
                     $class: 'AmazonWebServicesCredentialsBinding',
@@ -78,17 +97,19 @@ pipeline {
             }
         }
 
-        // ✅ FIXED WAIT STAGE
         stage('Wait for Lambda Update') {
+            when {
+                expression { params.ADD_LAYER }
+            }
             steps {
                 withCredentials([[ 
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds' 
                 ]]) {
                     sh '''
-                    echo "⏳ Waiting for Lambda update to complete..."
+                    echo "⏳ Waiting for Lambda layer update to complete..."
 
-                    for i in $(seq 1 24); do
+                    for i in $(seq 1 30); do
                       STATUS=$(aws lambda get-function-configuration \
                         --function-name $FUNCTION_NAME \
                         --query 'LastUpdateStatus' \
@@ -117,11 +138,11 @@ pipeline {
             }
         }
 
+        /* ================= ALWAYS DEPLOY CODE ================= */
+
         stage('Package Lambda Function') {
             steps {
-                sh '''
-                zip -r function.zip lambda-function.py
-                '''
+                sh 'zip -r function.zip lambda-function.py'
             }
         }
 
@@ -144,7 +165,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ PIPELINE SUCCESS – Lambda + Layer deployed"
+            echo "✅ PIPELINE SUCCESS – Deployment completed"
         }
         failure {
             echo "❌ PIPELINE FAILED – check logs"
