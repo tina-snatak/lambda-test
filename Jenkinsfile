@@ -23,13 +23,6 @@ pipeline {
             }
         }
 
-        stage('Clone Repo') {
-            steps {
-                git branch: 'main',
-                    url: 'https://github.com/tina-snatak/lambda-test.git'
-            }
-        }
-
         /* ================= OPTIONAL LAYER FLOW ================= */
 
         stage('Build Lambda Layer') {
@@ -55,9 +48,9 @@ pipeline {
                 expression { params.ADD_LAYER }
             }
             steps {
-                withCredentials([[ 
+                withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds' 
+                    credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
                     aws lambda publish-layer-version \
@@ -75,9 +68,9 @@ pipeline {
                 expression { params.ADD_LAYER }
             }
             steps {
-                withCredentials([[ 
+                withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds' 
+                    credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
                     LAYER_ARN=$(aws lambda list-layer-versions \
@@ -102,12 +95,12 @@ pipeline {
                 expression { params.ADD_LAYER }
             }
             steps {
-                withCredentials([[ 
+                withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds' 
+                    credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
-                    echo "⏳ Waiting for Lambda layer update to complete..."
+                    echo " Waiting for Lambda layer update..."
 
                     for i in $(seq 1 30); do
                       STATUS=$(aws lambda get-function-configuration \
@@ -116,22 +109,22 @@ pipeline {
                         --output text \
                         --region $AWS_REGION)
 
-                      echo "Attempt $i → Status: $STATUS"
+                      echo "Attempt $i → $STATUS"
 
                       if [ "$STATUS" = "Successful" ]; then
-                        echo "✅ Lambda update completed"
+                        echo " Update completed"
                         exit 0
                       fi
 
                       if [ "$STATUS" = "Failed" ]; then
-                        echo "❌ Lambda update failed"
+                        echo " Update failed"
                         exit 1
                       fi
 
                       sleep 5
                     done
 
-                    echo "❌ Timeout waiting for Lambda update"
+                    echo " Timeout waiting for update"
                     exit 1
                     '''
                 }
@@ -148,9 +141,9 @@ pipeline {
 
         stage('Deploy Lambda Code') {
             steps {
-                withCredentials([[ 
+                withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds' 
+                    credentialsId: 'aws-creds'
                 ]]) {
                     sh '''
                     aws lambda update-function-code \
@@ -165,10 +158,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ PIPELINE SUCCESS – Deployment completed"
+            echo " PIPELINE SUCCESS – Deployment completed"
         }
         failure {
-            echo "❌ PIPELINE FAILED – check logs"
+            echo " PIPELINE FAILED – check logs"
         }
     }
 }
