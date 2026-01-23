@@ -26,16 +26,12 @@ pipeline {
             steps {
                 sh '''
                 set -e
-
                 rm -rf python layer.zip
                 mkdir python
-
                 python3 -m pip install -r requirements.txt -t python/
-
                 cd python
                 zip -r ../layer.zip .
                 cd ..
-
                 ls -lh layer.zip
                 '''
             }
@@ -82,7 +78,7 @@ pipeline {
             }
         }
 
-        // 🔥 NEW WAIT STAGE (IMPORTANT)
+        // ✅ FIXED WAIT STAGE
         stage('Wait for Lambda Update') {
             steps {
                 withCredentials([[ 
@@ -92,14 +88,14 @@ pipeline {
                     sh '''
                     echo "⏳ Waiting for Lambda update to complete..."
 
-                    for i in {1..12}; do
+                    for i in $(seq 1 24); do
                       STATUS=$(aws lambda get-function-configuration \
                         --function-name $FUNCTION_NAME \
                         --query 'LastUpdateStatus' \
                         --output text \
                         --region $AWS_REGION)
 
-                      echo "Current status: $STATUS"
+                      echo "Attempt $i → Status: $STATUS"
 
                       if [ "$STATUS" = "Successful" ]; then
                         echo "✅ Lambda update completed"
